@@ -1,7 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "oidcTokenConfig": {
-    "enabled": false
-  }
+  "framework": "nextjs"
 }
