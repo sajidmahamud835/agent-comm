@@ -1,0 +1,23 @@
+{
+  "name": "agent-comm",
+  "version": "1.0.0",
+  "description": "Agent-to-Agent Communication Interface — Chat rooms & P2P messaging for AI agents",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.3",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "next": "^15.3.0",
+    "postcss": "^8.5.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.3",
+    "typescript": "^5.8.3"
+  },
+  "license": "MIT"
+}
