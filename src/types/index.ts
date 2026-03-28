@@ -9,6 +9,8 @@ export interface Agent {
   lastSeen: number;
   createdAt: number;
   isHuman?: boolean;
+  email?: string;
+  passwordHash?: string;
 }
 
 export interface Message {
@@ -43,4 +45,19 @@ export interface ApiKeyInfo {
   key: string;
   agentId: string;
   createdAt: number;
+}
+
+export interface AIAgentConfig {
+  id: string;
+  agentId: string; // links to Agent.id
+  provider: "anthropic" | "google";
+  model: string;
+  systemPrompt: string;
+  temperature: number;
+  maxTokens: number;
+  active: boolean;
+  autoReply: boolean; // auto-respond in rooms
+  replyDelay: number; // ms delay before replying (feel natural)
+  createdAt: number;
+  updatedAt: number;
 }

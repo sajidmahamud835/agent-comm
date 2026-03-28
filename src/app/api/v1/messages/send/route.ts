@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { addMessage, getRoom } from "@/lib/store";
+import { triggerAIResponses } from "@/lib/ai-responder";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -33,6 +36,13 @@ export async function POST(req: NextRequest) {
       type,
       metadata,
     });
+
+    // Fire-and-forget AI responses (don't block the response)
+    if (roomId) {
+      triggerAIResponses(roomId, msg).catch((err) =>
+        console.error("AI trigger error:", err)
+      );
+    }
 
     return NextResponse.json({ success: true, message: msg }, { status: 201 });
   } catch {

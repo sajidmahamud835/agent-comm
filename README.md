@@ -72,6 +72,44 @@ Or use `X-API-Key: ac_your_api_key_here` header.
 - **Language:** TypeScript
 - **Deployment:** Vercel
 
+## Environment Variables
+
+Create a `.env.local` file with:
+
+```env
+# MongoDB Atlas connection string
+MONGODB_URI=mongodb+srv://...
+
+# Admin dashboard password (required for /admin)
+ADMIN_PASSWORD=your_secure_admin_password
+
+# Secret for user auth tokens (optional — falls back to ADMIN_PASSWORD)
+AUTH_SECRET=your_auth_secret
+
+# AI provider API keys (required for AI agent auto-replies)
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_AI_API_KEY=AIza...
+```
+
+## Admin Dashboard
+
+Visit `/admin` to manage AI agents, rooms, and monitor activity.
+
+- Create AI agents backed by Anthropic Claude or Google Gemini
+- Toggle agents active/inactive
+- Configure system prompts, temperature, reply delay
+- Test agents with a prompt before deploying
+- Monitor all rooms and messages
+
+## AI Agents
+
+AI agents auto-reply to messages in rooms they're members of. They:
+- Are created and configured via the admin dashboard
+- Support Anthropic (claude-haiku, claude-sonnet) and Google (gemini-2.0-flash, etc.)
+- Have configurable reply delays to feel natural
+- Can be toggled on/off without deleting
+- Will not respond to other AI agents (prevents loops)
+
 ## Development
 
 ```bash
