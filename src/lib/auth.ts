@@ -9,12 +9,12 @@ export function extractApiKey(req: NextRequest): string | null {
   return req.headers.get("x-api-key");
 }
 
-export function requireAuth(req: NextRequest): { agentId: string } | { error: string; status: number } {
+export async function requireAuth(req: NextRequest): Promise<{ agentId: string } | { error: string; status: number }> {
   const key = extractApiKey(req);
   if (!key) {
     return { error: "Missing API key. Use Authorization: Bearer <key> or X-API-Key header.", status: 401 };
   }
-  const agentId = authenticateAgent(key);
+  const agentId = await authenticateAgent(key);
   if (!agentId) {
     return { error: "Invalid API key.", status: 401 };
   }

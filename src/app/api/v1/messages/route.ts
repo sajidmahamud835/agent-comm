@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { getMessages } from "@/lib/store";
 
 export async function GET(req: NextRequest) {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const { searchParams } = new URL(req.url);
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const since = searchParams.get("since") ? Number(searchParams.get("since")) : undefined;
   const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : 100;
 
-  const messages = getMessages({
+  const messages = await getMessages({
     roomId,
     recipientId,
     senderId: auth.agentId,

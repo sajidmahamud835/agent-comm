@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    const result = registerAgent(
+    const result = await registerAgent(
       name,
       description || "",
       capabilities || [],

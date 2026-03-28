@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const recipientId = searchParams.get("recipientId") || undefined;
   const senderId = searchParams.get("senderId") || undefined;
   const since = searchParams.get("since") ? Number(searchParams.get("since")) : undefined;
-  return NextResponse.json(getMessages({ roomId, recipientId, senderId, since }));
+  return NextResponse.json(await getMessages({ roomId, recipientId, senderId, since }));
 }
 
 // Legacy POST for dashboard UI (simplified, no auth)
@@ -22,11 +22,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (roomId) {
-      const room = getRoom(roomId);
+      const room = await getRoom(roomId);
       if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
-    const msg = addMessage({ senderId, content, roomId, recipientId, type });
+    const msg = await addMessage({ senderId, content, roomId, recipientId, type });
     return NextResponse.json(msg, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });

@@ -1,94 +1,18 @@
 import { Agent, Message, Room } from "@/types";
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
+import { getDb } from "./db";
 
-// Persistence path — /tmp survives within a single serverless instance
-const PERSIST_DIR = process.env.NODE_ENV === "production" ? "/tmp/agentcomm" : ".data";
-const PERSIST_FILE = path.join(PERSIST_DIR, "store.json");
+// --- Helpers ---
 
-interface StoreData {
-  agents: Record<string, Agent>;
-  messages: Message[];
-  rooms: Record<string, Room>;
-  apiKeys: Record<string, string>; // plainKey -> agentId
-  webhooks: Record<string, string[]>;
+function sanitizeAgent(a: Agent): Agent {
+  return { ...a, apiKey: "[redacted]" };
 }
 
-// Use globalThis for in-memory cache
-const g = globalThis as unknown as {
-  __agentComm?: {
-    agents: Map<string, Agent>;
-    messages: Message[];
-    rooms: Map<string, Room>;
-    apiKeys: Map<string, string>;
-    webhooks: Map<string, string[]>;
-    initialized: boolean;
-    dirty: boolean;
-  };
-};
+async function ensureSeeded() {
+  const db = await getDb();
+  const agentCount = await db.collection("agents").countDocuments();
+  if (agentCount > 0) return;
 
-function persist() {
-  const store = g.__agentComm;
-  if (!store) return;
-  try {
-    if (!fs.existsSync(PERSIST_DIR)) fs.mkdirSync(PERSIST_DIR, { recursive: true });
-    const data: StoreData = {
-      agents: Object.fromEntries(store.agents),
-      messages: store.messages.slice(-500), // keep last 500 msgs
-      rooms: Object.fromEntries(store.rooms),
-      apiKeys: Object.fromEntries(store.apiKeys),
-      webhooks: Object.fromEntries(store.webhooks),
-    };
-    fs.writeFileSync(PERSIST_FILE, JSON.stringify(data), "utf-8");
-  } catch (e) {
-    console.error("Persist error:", e);
-  }
-}
-
-function restore(): boolean {
-  try {
-    if (!fs.existsSync(PERSIST_FILE)) return false;
-    const raw = fs.readFileSync(PERSIST_FILE, "utf-8");
-    const data: StoreData = JSON.parse(raw);
-    const store = g.__agentComm!;
-    store.agents = new Map(Object.entries(data.agents || {}));
-    store.messages = data.messages || [];
-    store.rooms = new Map(Object.entries(data.rooms || {}));
-    store.apiKeys = new Map(Object.entries(data.apiKeys || {}));
-    store.webhooks = new Map(Object.entries(data.webhooks || {}));
-    return store.agents.size > 0;
-  } catch (e) {
-    console.error("Restore error:", e);
-    return false;
-  }
-}
-
-function getStore() {
-  if (!g.__agentComm) {
-    g.__agentComm = {
-      agents: new Map(),
-      messages: [],
-      rooms: new Map(),
-      apiKeys: new Map(),
-      webhooks: new Map(),
-      initialized: false,
-      dirty: false,
-    };
-  }
-  if (!g.__agentComm.initialized) {
-    g.__agentComm.initialized = true;
-    // Try to restore from disk first
-    const restored = restore();
-    if (!restored) {
-      seed();
-    }
-  }
-  return g.__agentComm;
-}
-
-function seed() {
-  const store = g.__agentComm!;
   const now = Date.now();
 
   const systemAgent: Agent = {
@@ -102,16 +26,18 @@ function seed() {
     lastSeen: now,
     createdAt: now,
   };
-  store.agents.set(systemAgent.id, systemAgent);
+
+  await db.collection("agents").insertOne({ ...systemAgent, _key: systemAgent.id });
 
   const defaultRooms: Room[] = [
     { id: "lobby", name: "Lobby", description: "Public room — all agents join automatically", members: ["system"], createdAt: now, lastActivity: now, isPublic: true, type: "group" },
     { id: "tasks", name: "Task Board", description: "Post and claim tasks across agents", members: ["system"], createdAt: now, lastActivity: now, isPublic: true, type: "task" },
     { id: "status", name: "Status Updates", description: "Agent status broadcasts", members: ["system"], createdAt: now, lastActivity: now, isPublic: true, type: "broadcast" },
   ];
-  defaultRooms.forEach((r) => store.rooms.set(r.id, r));
 
-  store.messages.push({
+  await db.collection("rooms").insertMany(defaultRooms.map((r) => ({ ...r, _key: r.id })));
+
+  await db.collection("messages").insertOne({
     id: "msg-welcome",
     senderId: "system",
     content: "AgentComm is online. Agents can register via POST /api/v1/agents/register",
@@ -120,32 +46,40 @@ function seed() {
     type: "system",
   });
 
-  persist();
+  // Create indexes
+  await db.collection("agents").createIndex({ id: 1 }, { unique: true });
+  await db.collection("rooms").createIndex({ id: 1 }, { unique: true });
+  await db.collection("messages").createIndex({ roomId: 1, timestamp: -1 });
+  await db.collection("messages").createIndex({ senderId: 1, recipientId: 1, timestamp: -1 });
+  await db.collection("apikeys").createIndex({ key: 1 }, { unique: true });
+  await db.collection("webhooks").createIndex({ agentId: 1 });
 }
 
 // --- Agents ---
 
-export function getAgents(): Agent[] {
-  return Array.from(getStore().agents.values()).map(sanitizeAgent);
+export async function getAgents(): Promise<Agent[]> {
+  await ensureSeeded();
+  const db = await getDb();
+  const agents = await db.collection("agents").find({}).toArray();
+  return agents.map((a) => sanitizeAgent(a as unknown as Agent));
 }
 
-export function getAgent(id: string): Agent | undefined {
-  const a = getStore().agents.get(id);
-  return a ? sanitizeAgent(a) : undefined;
+export async function getAgent(id: string): Promise<Agent | undefined> {
+  await ensureSeeded();
+  const db = await getDb();
+  const a = await db.collection("agents").findOne({ id });
+  return a ? sanitizeAgent(a as unknown as Agent) : undefined;
 }
 
-function sanitizeAgent(a: Agent): Agent {
-  return { ...a, apiKey: "[redacted]" };
-}
-
-export function registerAgent(
+export async function registerAgent(
   name: string,
   description: string,
   capabilities: string[],
   avatar?: string,
   isHuman?: boolean
-): { agent: Agent; apiKey: string } {
-  const store = getStore();
+): Promise<{ agent: Agent; apiKey: string }> {
+  await ensureSeeded();
+  const db = await getDb();
   const id = `agent-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now().toString(36)}`;
   const plainKey = `ac_${crypto.randomBytes(24).toString("hex")}`;
   const hashedKey = crypto.createHash("sha256").update(plainKey).digest("hex");
@@ -163,14 +97,16 @@ export function registerAgent(
     isHuman,
   };
 
-  store.agents.set(id, agent);
-  store.apiKeys.set(plainKey, id);
+  await db.collection("agents").insertOne({ ...agent });
+  await db.collection("apikeys").insertOne({ key: plainKey, agentId: id });
 
   // Auto-join lobby
-  const lobby = store.rooms.get("lobby");
-  if (lobby && !lobby.members.includes(id)) lobby.members.push(id);
+  await db.collection("rooms").updateOne(
+    { id: "lobby" },
+    { $addToSet: { members: id } }
+  );
 
-  store.messages.push({
+  await db.collection("messages").insertOne({
     id: `msg-join-${id}`,
     senderId: "system",
     content: `${agent.avatar} ${agent.name} has joined the network${isHuman ? " (human)" : ""}`,
@@ -179,117 +115,143 @@ export function registerAgent(
     type: "system",
   });
 
-  persist();
   return { agent: sanitizeAgent(agent), apiKey: plainKey };
 }
 
-export function authenticateAgent(apiKey: string): string | null {
-  const store = getStore();
-  const agentId = store.apiKeys.get(apiKey);
-  if (agentId) {
-    const agent = store.agents.get(agentId);
-    if (agent) {
-      agent.lastSeen = Date.now();
-      agent.status = "online";
-    }
+export async function authenticateAgent(apiKey: string): Promise<string | null> {
+  await ensureSeeded();
+  const db = await getDb();
+  const record = await db.collection("apikeys").findOne({ key: apiKey });
+  if (record) {
+    await db.collection("agents").updateOne(
+      { id: record.agentId },
+      { $set: { lastSeen: Date.now(), status: "online" } }
+    );
+    return record.agentId as string;
   }
-  return agentId || null;
+  return null;
 }
 
-export function updateAgentStatus(agentId: string, status: Agent["status"]): boolean {
-  const agent = getStore().agents.get(agentId);
-  if (!agent) return false;
-  agent.status = status;
-  agent.lastSeen = Date.now();
-  persist();
-  return true;
+export async function updateAgentStatus(agentId: string, status: Agent["status"]): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection("agents").updateOne(
+    { id: agentId },
+    { $set: { status, lastSeen: Date.now() } }
+  );
+  return result.matchedCount > 0;
 }
 
 // --- Rooms ---
 
-export function getRooms(): Room[] {
-  return Array.from(getStore().rooms.values());
+export async function getRooms(): Promise<Room[]> {
+  await ensureSeeded();
+  const db = await getDb();
+  const rooms = await db.collection("rooms").find({}).toArray();
+  return rooms as unknown as Room[];
 }
 
-export function getRoom(id: string): Room | undefined {
-  return getStore().rooms.get(id);
+export async function getRoom(id: string): Promise<Room | undefined> {
+  await ensureSeeded();
+  const db = await getDb();
+  const room = await db.collection("rooms").findOne({ id });
+  return room ? (room as unknown as Room) : undefined;
 }
 
-export function createRoom(name: string, description: string, type: Room["type"], creatorId: string, isPublic = true): Room {
-  const store = getStore();
+export async function createRoom(name: string, description: string, type: Room["type"], creatorId: string, isPublic = true): Promise<Room> {
+  const db = await getDb();
   const id = `room-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now().toString(36)}`;
   const room: Room = { id, name, description, members: [creatorId], createdAt: Date.now(), lastActivity: Date.now(), isPublic, type };
-  store.rooms.set(id, room);
-  persist();
+  await db.collection("rooms").insertOne({ ...room });
   return room;
 }
 
-export function joinRoom(roomId: string, agentId: string): boolean {
-  const room = getStore().rooms.get(roomId);
-  if (!room) return false;
-  if (!room.members.includes(agentId)) room.members.push(agentId);
-  persist();
-  return true;
+export async function joinRoom(roomId: string, agentId: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection("rooms").updateOne(
+    { id: roomId },
+    { $addToSet: { members: agentId } }
+  );
+  return result.matchedCount > 0;
 }
 
-export function leaveRoom(roomId: string, agentId: string): boolean {
-  const room = getStore().rooms.get(roomId);
-  if (!room) return false;
-  room.members = room.members.filter((m) => m !== agentId);
-  persist();
-  return true;
+export async function leaveRoom(roomId: string, agentId: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection("rooms").updateOne(
+    { id: roomId },
+    { $pull: { members: agentId } as any }
+  );
+  return result.matchedCount > 0;
 }
 
 // --- Messages ---
 
-export function getMessages(opts: {
+export async function getMessages(opts: {
   roomId?: string;
   recipientId?: string;
   senderId?: string;
   since?: number;
   limit?: number;
-}): Message[] {
+}): Promise<Message[]> {
+  await ensureSeeded();
   const { roomId, recipientId, senderId, since, limit = 100 } = opts;
-  let filtered = getStore().messages.filter((m) => {
-    if (roomId) return m.roomId === roomId;
-    if (recipientId && senderId) {
-      return (
-        (m.recipientId === recipientId && m.senderId === senderId) ||
-        (m.recipientId === senderId && m.senderId === recipientId)
-      );
-    }
-    return false;
-  });
-  if (since) filtered = filtered.filter((m) => m.timestamp > since);
-  return filtered.slice(-limit);
+  const db = await getDb();
+
+  const filter: any = {};
+  if (roomId) {
+    filter.roomId = roomId;
+  } else if (recipientId && senderId) {
+    filter.$or = [
+      { recipientId, senderId },
+      { recipientId: senderId, senderId: recipientId },
+    ];
+  }
+  if (since) {
+    filter.timestamp = { $gt: since };
+  }
+
+  const messages = await db
+    .collection("messages")
+    .find(filter)
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .toArray();
+
+  return messages.reverse() as unknown as Message[];
 }
 
-export function addMessage(msg: Omit<Message, "id" | "timestamp">): Message {
-  const store = getStore();
+export async function addMessage(msg: Omit<Message, "id" | "timestamp">): Promise<Message> {
+  const db = await getDb();
   const fullMsg: Message = {
     ...msg,
     id: `msg-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
     timestamp: Date.now(),
   };
-  store.messages.push(fullMsg);
+
+  await db.collection("messages").insertOne({ ...fullMsg });
+
   if (fullMsg.roomId) {
-    const room = store.rooms.get(fullMsg.roomId);
-    if (room) room.lastActivity = fullMsg.timestamp;
+    await db.collection("rooms").updateOne(
+      { id: fullMsg.roomId },
+      { $set: { lastActivity: fullMsg.timestamp } }
+    );
   }
-  persist();
+
   return fullMsg;
 }
 
 // --- Webhooks ---
 
-export function registerWebhook(agentId: string, url: string): void {
-  const store = getStore();
-  const hooks = store.webhooks.get(agentId) || [];
-  if (!hooks.includes(url)) hooks.push(url);
-  store.webhooks.set(agentId, hooks);
-  persist();
+export async function registerWebhook(agentId: string, url: string): Promise<void> {
+  const db = await getDb();
+  await db.collection("webhooks").updateOne(
+    { agentId },
+    { $addToSet: { urls: url } },
+    { upsert: true }
+  );
 }
 
-export function getWebhooks(agentId: string): string[] {
-  return getStore().webhooks.get(agentId) || [];
+export async function getWebhooks(agentId: string): Promise<string[]> {
+  const db = await getDb();
+  const record = await db.collection("webhooks").findOne({ agentId });
+  return record?.urls || [];
 }

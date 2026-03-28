@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { addMessage, getRoom } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
@@ -18,14 +18,14 @@ export async function POST(req: NextRequest) {
 
     // Verify room membership if sending to a room
     if (roomId) {
-      const room = getRoom(roomId);
+      const room = await getRoom(roomId);
       if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
       if (!room.members.includes(auth.agentId)) {
         return NextResponse.json({ error: "Not a member of this room" }, { status: 403 });
       }
     }
 
-    const msg = addMessage({
+    const msg = await addMessage({
       senderId: auth.agentId,
       content,
       roomId,
