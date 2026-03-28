@@ -7,7 +7,7 @@ import { useEffect, useState, useCallback } from "react";
 interface AIAgentConfig {
   id: string;
   agentId: string;
-  provider: "anthropic" | "google";
+  provider: "anthropic" | "google" | "openrouter";
   model: string;
   systemPrompt: string;
   temperature: number;
@@ -72,6 +72,18 @@ const GOOGLE_MODELS = [
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
   "gemini-1.5-pro",
+];
+const OPENROUTER_MODELS = [
+  "openai/gpt-4o-mini",
+  "openai/gpt-4o",
+  "anthropic/claude-sonnet-4",
+  "anthropic/claude-haiku-3.5",
+  "google/gemini-2.0-flash-001",
+  "google/gemini-2.5-pro-preview",
+  "meta-llama/llama-4-maverick",
+  "deepseek/deepseek-chat-v3-0324",
+  "mistralai/mistral-small-3.1-24b-instruct",
+  "qwen/qwen3-235b-a22b",
 ];
 
 // ─── Main Component ─────────────────────────────────────────────────────────
@@ -335,7 +347,7 @@ function AIAgentsTab({ token }: { token: string }) {
                     <div className="min-w-0">
                       <div className="font-semibold flex items-center gap-2 flex-wrap">
                         {agent?.name || config.agentId}
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${config.provider === "anthropic" ? "bg-orange-500/20 text-orange-400" : "bg-blue-500/20 text-blue-400"}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${config.provider === "anthropic" ? "bg-orange-500/20 text-orange-400" : config.provider === "google" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
                           {config.provider}
                         </span>
                         <span className="text-xs bg-[var(--bg-tertiary)] text-[var(--text-secondary)] px-2 py-0.5 rounded-full">
@@ -465,7 +477,7 @@ function AIAgentFormModal({
     name: agent?.name || "",
     description: agent?.description || "",
     avatar: agent?.avatar || "🤖",
-    provider: config?.provider || "anthropic" as "anthropic" | "google",
+    provider: config?.provider || "anthropic" as "anthropic" | "google" | "openrouter",
     model: config?.model || "claude-haiku-35-20241022",
     systemPrompt: config?.systemPrompt || "",
     temperature: config?.temperature ?? 0.7,
@@ -478,10 +490,18 @@ function AIAgentFormModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const models = form.provider === "anthropic" ? ANTHROPIC_MODELS : GOOGLE_MODELS;
+  const models = form.provider === "anthropic"
+    ? ANTHROPIC_MODELS
+    : form.provider === "google"
+    ? GOOGLE_MODELS
+    : OPENROUTER_MODELS;
 
-  const handleProviderChange = (p: "anthropic" | "google") => {
-    const defaultModel = p === "anthropic" ? ANTHROPIC_MODELS[0] : GOOGLE_MODELS[0];
+  const handleProviderChange = (p: "anthropic" | "google" | "openrouter") => {
+    const defaultModel = p === "anthropic"
+      ? ANTHROPIC_MODELS[0]
+      : p === "google"
+      ? GOOGLE_MODELS[0]
+      : OPENROUTER_MODELS[0];
     setForm({ ...form, provider: p, model: defaultModel });
   };
 
@@ -581,7 +601,7 @@ function AIAgentFormModal({
             {/* Provider */}
             <FormField label="Provider">
               <div className="flex gap-2">
-                {(["anthropic", "google"] as const).map((p) => (
+                {(["anthropic", "google", "openrouter"] as const).map((p) => (
                   <button
                     key={p}
                     onClick={() => handleProviderChange(p)}
@@ -591,7 +611,7 @@ function AIAgentFormModal({
                         : "border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)]"
                     }`}
                   >
-                    {p === "anthropic" ? "🟠 Anthropic" : "🔵 Google"}
+                    {p === "anthropic" ? "🟠 Anthropic" : p === "google" ? "🔵 Google" : "🟣 OpenRouter"}
                   </button>
                 ))}
               </div>

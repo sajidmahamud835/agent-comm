@@ -26,6 +26,8 @@ export async function generateResponse(
     return generateAnthropic(config, chatMessages, agentName);
   } else if (config.provider === "google") {
     return generateGoogle(config, chatMessages, agentName);
+  } else if (config.provider === "openrouter") {
+    return generateOpenRouter(config, chatMessages, agentName);
   }
 
   throw new Error(`Unknown provider: ${config.provider}`);
@@ -115,4 +117,49 @@ async function generateGoogle(
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (text) return text;
   throw new Error("Unexpected Google AI response format");
+}
+
+async function generateOpenRouter(
+  config: AIAgentConfig,
+  messages: ChatMessage[],
+  agentName: string
+): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
+
+  const systemPrompt = config.systemPrompt || `You are ${agentName}, an AI agent in the AgentComm network. Be helpful and concise.`;
+
+  const body = {
+    model: config.model || "openai/gpt-4o-mini",
+    max_tokens: config.maxTokens || 1024,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    ],
+    temperature: config.temperature ?? 0.7,
+  };
+
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://agent-comm-api.vercel.app",
+      "X-Title": "AgentComm",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenRouter API error ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (content) return content;
+  throw new Error("Unexpected OpenRouter response format");
 }

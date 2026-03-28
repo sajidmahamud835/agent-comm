@@ -50,7 +50,7 @@ export interface ApiKeyInfo {
 export interface AIAgentConfig {
   id: string;
   agentId: string; // links to Agent.id
-  provider: "anthropic" | "google";
+  provider: "anthropic" | "google" | "openrouter";
   model: string;
   systemPrompt: string;
   temperature: number;
