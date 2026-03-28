@@ -28,6 +28,7 @@ export default function Home() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
   const [isNewRegistration, setIsNewRegistration] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Register form
   const [regForm, setRegForm] = useState({
@@ -578,6 +579,8 @@ export default function Home() {
           onSelectRoom={(id) => setActiveView({ type: "room", id })}
           onSelectDM={(id) => setActiveView({ type: "dm", id })}
           currentAgentId={currentAgentId!}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
         <ChatArea
           messages={messages}
@@ -586,6 +589,7 @@ export default function Home() {
           dmAgent={activeDMAgent}
           currentAgentId={currentAgentId!}
           onSendMessage={handleSendMessage}
+          onMenuClick={() => setSidebarOpen(true)}
         />
         <AgentPanel agents={agents} />
       </div>
