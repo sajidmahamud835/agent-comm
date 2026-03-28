@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { addMessage, getRoom } from "@/lib/store";
-import { triggerAIResponses } from "@/lib/ai-responder";
+import { triggerAIResponses, fireWebhooks } from "@/lib/ai-responder";
 import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     if (roomId) {
       after(async () => {
         try {
+          fireWebhooks(roomId, msg);
           await triggerAIResponses(roomId, msg);
         } catch (err) {
           console.error("AI trigger error:", err);

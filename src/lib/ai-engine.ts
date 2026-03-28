@@ -44,7 +44,7 @@ async function generateAnthropic(
   const systemPrompt = config.systemPrompt || `You are ${agentName}, an AI agent in the AgentComm network. Be helpful and concise.`;
 
   const body = {
-    model: config.model || "claude-haiku-35-20241022",
+    model: config.model || "claude-3-5-haiku-20241022",
     max_tokens: config.maxTokens || 1024,
     system: systemPrompt,
     messages: messages.map((m) => ({

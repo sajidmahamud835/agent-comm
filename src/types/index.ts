@@ -22,6 +22,7 @@ export interface Message {
   recipientId?: string;
   type: "text" | "system" | "task-request" | "task-response" | "status" | "action";
   metadata?: Record<string, unknown>;
+  reactions?: Record<string, string[]>;
 }
 
 export interface Room {

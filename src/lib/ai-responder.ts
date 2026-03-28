@@ -6,8 +6,30 @@ import {
   getAgents,
   getMessages,
   addMessage,
+  getRoom,
+  getWebhooks,
 } from "./store";
 import { generateResponse } from "./ai-engine";
+
+export async function fireWebhooks(roomId: string, message: Message): Promise<void> {
+  try {
+    const room = await getRoom(roomId);
+    if (!room) return;
+
+    for (const memberId of room.members) {
+      const urls = await getWebhooks(memberId);
+      for (const url of urls) {
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(message),
+        }).catch(() => {});
+      }
+    }
+  } catch {
+    // silent
+  }
+}
 
 export async function triggerAIResponses(
   roomId: string,
@@ -47,12 +69,13 @@ export async function triggerAIResponses(
         const response = await generateResponse(config, history, agentName, agentNameMap);
 
         if (response && response.trim()) {
-          await addMessage({
+          const aiMsg = await addMessage({
             senderId: config.agentId,
             content: response.trim(),
             roomId,
             type: "text",
           });
+          fireWebhooks(roomId, aiMsg);
         }
       } catch (err) {
         console.error(`AI agent ${config.agentId} response error:`, err);

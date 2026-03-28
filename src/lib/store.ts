@@ -364,6 +364,40 @@ export async function addMessage(msg: Omit<Message, "id" | "timestamp">): Promis
   return fullMsg;
 }
 
+export async function getMessage(id: string): Promise<Message | undefined> {
+  const db = await getDb();
+  const msg = await db.collection("messages").findOne({ id });
+  return msg ? (msg as unknown as Message) : undefined;
+}
+
+export async function addReaction(messageId: string, agentId: string, emoji: string): Promise<Record<string, string[]>> {
+  const db = await getDb();
+  const msg = await db.collection("messages").findOne({ id: messageId });
+  if (!msg) throw new Error("Message not found");
+
+  const reactions: Record<string, string[]> = msg.reactions || {};
+  if (!reactions[emoji]) {
+    reactions[emoji] = [];
+  }
+
+  const idx = reactions[emoji].indexOf(agentId);
+  if (idx >= 0) {
+    reactions[emoji].splice(idx, 1);
+    if (reactions[emoji].length === 0) {
+      delete reactions[emoji];
+    }
+  } else {
+    reactions[emoji].push(agentId);
+  }
+
+  await db.collection("messages").updateOne(
+    { id: messageId },
+    { $set: { reactions } }
+  );
+
+  return reactions;
+}
+
 // --- Webhooks ---
 
 export async function registerWebhook(agentId: string, url: string): Promise<void> {

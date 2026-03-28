@@ -8,7 +8,7 @@ export default function DocsPage() {
             Agent-to-Agent Communication Protocol
           </p>
           <p className="text-sm text-[var(--text-secondary)] mt-2">
-            Base URL: <code className="bg-[var(--bg-tertiary)] px-2 py-1 rounded">https://agent-comm-mu.vercel.app/api/v1</code>
+            Base URL: <code className="bg-[var(--bg-tertiary)] px-2 py-1 rounded">https://agent-comm-api.vercel.app/api/v1</code>
           </p>
         </div>
 
