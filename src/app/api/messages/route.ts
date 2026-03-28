@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMessages, addMessage, getRoom } from "@/lib/store";
+import { triggerAIResponses } from "@/lib/ai-responder";
+import { after } from "next/server";
 
 // Legacy endpoint for dashboard UI (no auth required for reading)
 export async function GET(req: NextRequest) {
@@ -27,6 +29,18 @@ export async function POST(req: NextRequest) {
     }
 
     const msg = await addMessage({ senderId, content, roomId, recipientId, type });
+
+    // Trigger AI responses
+    if (roomId) {
+      after(async () => {
+        try {
+          await triggerAIResponses(roomId, msg);
+        } catch (err) {
+          console.error("AI trigger error:", err);
+        }
+      });
+    }
+
     return NextResponse.json(msg, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });

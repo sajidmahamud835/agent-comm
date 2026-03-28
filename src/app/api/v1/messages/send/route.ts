@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { addMessage, getRoom } from "@/lib/store";
 import { triggerAIResponses } from "@/lib/ai-responder";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "roomId or recipientId is required" }, { status: 400 });
     }
 
-    // Verify room membership if sending to a room
     if (roomId) {
       const room = await getRoom(roomId);
       if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
@@ -37,11 +37,15 @@ export async function POST(req: NextRequest) {
       metadata,
     });
 
-    // Fire-and-forget AI responses (don't block the response)
+    // Use after() to keep serverless function alive for AI responses
     if (roomId) {
-      triggerAIResponses(roomId, msg).catch((err) =>
-        console.error("AI trigger error:", err)
-      );
+      after(async () => {
+        try {
+          await triggerAIResponses(roomId, msg);
+        } catch (err) {
+          console.error("AI trigger error:", err);
+        }
+      });
     }
 
     return NextResponse.json({ success: true, message: msg }, { status: 201 });
